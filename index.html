@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Générateur de Code de Pairage</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        body {
+            font-family: 'Roboto', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 420px;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        p {
+            font-size: 16px;
+            color: #606770;
+            margin-bottom: 30px;
+        }
+        input[type="tel"] {
+            width: calc(100% - 24px);
+            padding: 12px;
+            border: 1px solid #dddfe2;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 15px;
+            background-color: #00a884;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:disabled {
+            background-color: #a0a0a0;
+            cursor: not-allowed;
+        }
+        button:not(:disabled):hover {
+            background-color: #008a6e;
+        }
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 6px;
+            background-color: #e7f3ff;
+            display: none;
+        }
+        .result h2 {
+            font-size: 16px;
+            margin: 0 0 10px;
+            color: #1c1e21;
+        }
+        #pairCodeDisplay {
+            font-size: 36px;
+            font-weight: 700;
+            color: #1877f2;
+            letter-spacing: 5px;
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .status-message, .error-message {
+            margin-top: 15px;
+            font-size: 14px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status-message {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Connecter un Appareil</h1>
+        <p>Entrez votre numéro WhatsApp (avec indicatif pays) pour générer un code de pairage.</p>
+        <form id="pairForm">
+            <input type="tel" id="phone" name="phone" placeholder="+242061234567" required>
+            <button type="submit" id="generateBtn">Générer le Code</button>
+        </form>
+        <div id="error" class="error-message"></div>
+        <div id="status" class="status-message"></div>
+        <div id="result" class="result">
+            <h2>Entrez ce code sur votre téléphone :</h2>
+            <p id="pairCodeDisplay"></p>
+        </div>
+    </div>
+
+    <script>
+        const pairForm = document.getElementById('pairForm');
+        const generateBtn = document.getElementById('generateBtn');
+        const resultDiv = document.getElementById('result');
+        const pairCodeDisplay = document.getElementById('pairCodeDisplay');
+        const errorDiv = document.getElementById('error');
+        const statusDiv = document.getElementById('status');
+        let statusInterval;
+
+        pairForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Génération...';
+            resultDiv.style.display = 'none';
+            errorDiv.style.display = 'none';
+            statusDiv.style.display = 'none';
+            if (statusInterval) clearInterval(statusInterval);
+
+            try {
+                const response = await fetch('/generate-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: document.getElementById('phone').value }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erreur inconnue.');
+                }
+                
+                pairCodeDisplay.textContent = data.pairCode.match(/.{1,4}/g).join('-');
+                resultDiv.style.display = 'block';
+                statusDiv.textContent = "En attente de connexion... Ouvrez WhatsApp > Appareils connectés > Connecter avec le numéro de téléphone.";
+                statusDiv.style.display = 'block';
+                
+                statusInterval = setInterval(checkStatus, 3000);
+
+            } catch (err) {
+                errorDiv.textContent = err.message;
+                errorDiv.style.display = 'block';
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Générer le Code';
+            }
+        });
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                
+                if (data.status === 'connected') {
+                    clearInterval(statusInterval);
+                    statusDiv.style.backgroundColor = '#d4edda';
+                    statusDiv.style.color = '#155724';
+                    statusDiv.textContent = `Appareil connecté avec succès ! ID: ${data.code}`;
+                    resultDiv.style.display = 'none';
+                    generateBtn.disabled = true;
+                    generateBtn.textContent = 'Connecté';
+                }
+            } catch (err) {
+                console.error("Erreur lors de la vérification du statut:", err);
+            }
+        }
+    </script>
+</body>
+</html>
