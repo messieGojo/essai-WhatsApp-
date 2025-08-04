@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Générateur de Code de Pairage</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        body { font-family: 'Roboto', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f2f5; color: #1c1e21; }
+        .container { background-color: #ffffff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); text-align: center; width: 100%; max-width: 420px; }
+        h1 { font-size: 24px; margin-bottom: 20px; }
+        p { font-size: 16px; color: #606770; margin-bottom: 30px; }
+        input[type="tel"] { width: calc(100% - 24px); padding: 12px; border: 1px solid #dddfe2; border-radius: 6px; font-size: 16px; }
+        button { width: 100%; padding: 12px; margin-top: 15px; background-color: #00a884; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer; transition: background-color 0.3s; }
+        button:disabled { background-color: #a0a0a0; cursor: not-allowed; }
+        button:not(:disabled):hover { background-color: #008a6e; }
+        .result { margin-top: 30px; padding: 20px; border-radius: 6px; background-color: #e7f3ff; display: none; }
+        .result h2 { font-size: 16px; margin: 0 0 10px; color: #1c1e21; }
+        #pairCodeDisplay { font-size: 36px; font-weight: 700; color: #1877f2; letter-spacing: 5px; background-color: #fff; padding: 10px; border-radius: 4px; }
+        .message-box { margin-top: 15px; font-size: 14px; padding: 10px; border-radius: 5px; display: none; }
+        .status { background-color: #e7f0fe; color: #4b5563; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Connecter un Appareil</h1>
+        <p>Entrez votre numéro WhatsApp (avec indicatif pays, sans le "+") pour générer un code de pairage.</p>
+        <form id="pairForm">
+            <input type="tel" id="phone" name="phone" placeholder="242061234567" required>
+            <button type="submit" id="generateBtn">Générer le Code</button>
+        </form>
+        <div id="messageBox" class="message-box"></div>
+        <div id="result" class="result">
+            <h2>Entrez ce code sur votre téléphone :</h2>
+            <p id="pairCodeDisplay"></p>
+        </div>
+    </div>
+
+    <script>
+        const pairForm = document.getElementById('pairForm');
+        const generateBtn = document.getElementById('generateBtn');
+        const phoneInput = document.getElementById('phone');
+        const resultDiv = document.getElementById('result');
+        const pairCodeDisplay = document.getElementById('pairCodeDisplay');
+        const messageBox = document.getElementById('messageBox');
+        let statusInterval;
+
+        function showMessage(type, text) {
+            messageBox.className = `message-box ${type}`;
+            messageBox.textContent = text;
+            messageBox.style.display = 'block';
+        }
+
+        // --- Logique du formulaire simplifiée ---
+        pairForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Génération...';
+            resultDiv.style.display = 'none';
+            messageBox.style.display = 'none';
+            if (statusInterval) clearInterval(statusInterval);
+
+            try {
+                const response = await fetch('/generate-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: phoneInput.value }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Erreur inconnue du serveur.');
+                }
+                
+                // CHANGEMENT ICI : On affiche le code directement
+                pairCodeDisplay.textContent = data.code;
+                resultDiv.style.display = 'block';
+                showMessage('status', 'Veuillez entrer le code sur votre téléphone. En attente de la connexion...');
+                
+                generateBtn.textContent = 'Générer un autre Code';
+                generateBtn.disabled = false;
+                
+                // On commence à vérifier le statut de la connexion FINALE
+                statusInterval = setInterval(checkConnectionStatus, 3000);
+
+            } catch (err) {
+                showMessage('error', err.message);
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Générer le Code';
+            }
+        });
+
+        // --- Cette fonction vérifie uniquement si la connexion a été établie ---
+        async function checkConnectionStatus() {
+            try {
+                const response = await fetch('/status');
+                if (!response.ok) return;
+
+                const data = await response.json();
+
+                if (data.status === 'connected') {
+                    clearInterval(statusInterval); // On arrête de vérifier
+                    showMessage('success', `Appareil connecté avec succès ! ID: ${data.code}`);
+                    resultDiv.style.display = 'none';
+                    generateBtn.disabled = true;
+                    phoneInput.disabled = true;
+                    generateBtn.textContent = 'Appareil Connecté';
+                }
+                // Si le statut est 'disconnected', on ne fait rien, on continue de sonder
+                // en attendant que l'utilisateur finisse la manip.
+
+            } catch (err) {
+                // Le fetch peut échouer si le serveur redémarre, la boucle continuera d'essayer
+                console.error("Erreur de vérification du statut:", err);
+            }
+        }
+        
+        // On vérifie le statut au chargement de la page pour voir si on est déjà connecté
+        checkConnectionStatus();
+    </script>
+</body>
+</html>
